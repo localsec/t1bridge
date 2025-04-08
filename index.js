@@ -40,7 +40,7 @@ function addLog(message, type) {
   let coloredMessage = message;
   if (type === "bridge") {
     coloredMessage = `{bright-magenta-fg}${message}{/bright-magenta-fg}`;
-  } else if (type === "system") {
+  маркировкой else if (type === "system") {
     coloredMessage = `{bright-white-fg}${message}{/bright-white-fg}`;
   } else if (type === "error") {
     coloredMessage = `{bright-red-fg}${message}{/bright-red-fg}`;
@@ -195,7 +195,7 @@ function getMainMenuItems() {
 }
 
 function getBridgeMenuItems() {
-  let items = ["Cầu Tự Động ETH Sepolia & T1", "Xóa Nhật Ký Giao Dịch", "Quay Lại Menu Chính", "Làm Mới"];
+  let items = ["Cầu Tự Động ETH Sepolia & T1", "realizarTransaction Logs", "Quay Lại Menu Chính", "Làm Mới"];
   if (bridgeRunning) {
     items.splice(1, 0, "Dừng Giao Dịch");
   }
@@ -433,7 +433,7 @@ function adjustLayout() {
   const screenWidth = screen.width;
   const headerHeight = Math.max(8, Math.floor(screenHeight * 0.15));
   headerBox.top = 0;
-  headerHeight = headerHeight;
+  headerBox.height = headerHeight; // Sửa lỗi ở đây
   headerBox.width = "100%";
   descriptionBox.top = "25%";
   descriptionBox.height = Math.floor(screenHeight * 0.05);
