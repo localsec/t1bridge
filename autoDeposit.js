@@ -32,61 +32,65 @@ const config = {
     PRIVATE_KEY: process.env.PRIVATE_KEY,
     AMOUNT_TO_DEPOSIT: process.env.AMOUNT_TO_DEPOSIT || "0.1", // ETH
     GAS_LIMIT: process.env.GAS_LIMIT || "300000",
-    L2_GAS_LIMIT: process.env.L2_GAS_LIMIT || "200000", // Gas limit cho L2
-    L2_RECIPIENT: process.env.L2_RECIPIENT || "0x4860CA818c3650Bc928dF43ea4eDA07704FC1581", // Địa chỉ nhận trên L2 (mặc định là ví gửi)
+    L2_GAS_LIMIT: process.env.L2_GAS_LIMIT || "500000", // Gas limit cho L2
+    L2_RECIPIENT: process.env.L2_RECIPIENT || "0x4860CA818c3650Bc928dF43ea4eDA07704FC1581",
     INTERVAL_MINUTES: process.env.INTERVAL_MINUTES || "30"
 };
 
-// ABI của bridge contract (cập nhật từ Optimism L1StandardBridge)
+// ABI của bridge contract (Proxy contract từ bạn cung cấp)
 const BRIDGE_ABI = [
+    {
+        "inputs": [
+            {"internalType": "address", "name": "_logic", "type": "address"},
+            {"internalType": "address", "name": "admin_", "type": "address"},
+            {"internalType": "bytes", "name": "_data", "type": "bytes"}
+        ],
+        "stateMutability": "payable",
+        "type": "constructor"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {"indexed": false, "internalType": "address", "name": "previousAdmin", "type": "address"},
+            {"indexed": false, "internalType": "address", "name": "newAdmin", "type": "address"}
+        ],
+        "name": "AdminChanged",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {"indexed": true, "internalType": "address", "name": "beacon", "type": "address"}
+        ],
+        "name": "BeaconUpgraded",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {"indexed": true, "internalType": "address", "name": "implementation", "type": "address"}
+        ],
+        "name": "Upgraded",
+        "type": "event"
+    },
+    {"stateMutability": "payable", "type": "fallback"},
+    {"stateMutability": "payable", "type": "receive"}
+];
+
+// ABI của implementation contract (dùng để gọi depositETHTo qua proxy)
+const IMPLEMENTATION_ABI = [
     {
         "constant": false,
         "inputs": [
-            {
-                "name": "_to",
-                "type": "address"
-            },
-            {
-                "name": "_l2Gas",
-                "type": "uint32"
-            },
-            {
-                "name": "_data",
-                "type": "bytes"
-            }
+            {"name": "_to", "type": "address"},
+            {"name": "_l2Gas", "type": "uint32"},
+            {"name": "_data", "type": "bytes"}
         ],
         "name": "depositETHTo",
         "outputs": [],
         "payable": true,
         "stateMutability": "payable",
         "type": "function"
-    },
-    {
-        "anonymous": false,
-        "inputs": [
-            {
-                "indexed": true,
-                "name": "_from",
-                "type": "address"
-            },
-            {
-                "indexed": true,
-                "name": "_to",
-                "type": "address"
-            },
-            {
-                "indexed": false,
-                "name": "_amount",
-                "type": "uint256"
-            },
-            {
-                "indexed": false,
-                "name": "_data",
-                "type": "bytes"
-            }
-        ],
-        "name": "ETHDepositInitiated",
-        "type": "event"
     }
 ];
 
@@ -135,11 +139,11 @@ async function autoDeposit() {
         const walletAddress = await wallet.getAddress();
         logger.info(`Using wallet address: ${walletAddress}`);
 
-        // Kết nối với bridge contract
+        // Kết nối với bridge contract (dùng ABI của proxy)
         logger.info(`Connecting to bridge contract at ${config.BRIDGE_ADDRESS}`);
         const bridgeContract = new ethers.Contract(
             config.BRIDGE_ADDRESS,
-            BRIDGE_ABI,
+            IMPLEMENTATION_ABI, // Dùng ABI của implementation để gọi hàm
             wallet
         );
 
@@ -162,7 +166,7 @@ async function autoDeposit() {
             throw new Error(`Insufficient balance. Required: ${config.AMOUNT_TO_DEPOSIT} ETH`);
         }
 
-        // Thực hiện deposit
+        // Thực hiện deposit qua proxy
         logger.info(`Initiating deposit to bridge ${config.BRIDGE_ADDRESS} for L2 recipient ${config.L2_RECIPIENT}`);
         const tx = await bridgeContract.depositETHTo(
             config.L2_RECIPIENT,
