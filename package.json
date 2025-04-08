@@ -1,5 +1,5 @@
 {
-  "name": "LocalSec - T1 Bridge",
+  "name": "LocalSec - T1 Auto Bridge",
   "version": "1.0.0",
   "main": "index.js",
   "type": "module",
@@ -7,7 +7,7 @@
     "start": "node index.js"
   },
   "keywords": [],
-  "author": "LocalSec",
+  "author": "VinSenzo",
   "license": "ISC",
   "description": "",
   "dependencies": {
