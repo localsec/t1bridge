@@ -61,10 +61,6 @@ function getRandomNumber(min, max) {
   return Math.random() * (max - min) + min;
 }
 
-function getShortHash(hash) {
-  return hash.slice(0, 6) + "..." + hash.slice(-4);
-}
-
 function updateLogs() {
   logsBox.setContent(transactionLogs.join("\n"));
   logsBox.setScrollPerc(100);
@@ -90,7 +86,7 @@ async function waitWithCancel(delay, type) {
 
 const screen = blessed.screen({
   smartCSR: true,
-  title: "T1 BRIDGE",
+  title: "Cầu T1",
   fullUnicode: true,
   mouse: true
 });
@@ -309,10 +305,10 @@ async function bridgeFromSepoliaToT1(i, amount) {
       walletSepolia.address,
       { value: totalValue, gasLimit: 500000 }
     );
-    addLog(`T1: Giao dịch đã gửi. Hash: ${getShortHash(tx.hash)}`, "bridge");
+    addLog(`T1: Giao dịch đã gửi. Hash: ${tx.hash}`, "bridge");
     const receipt = await tx.wait();
     if (receipt.status === 1) {
-      addLog(`T1: Giao dịch thành công. Hash: ${getShortHash(tx.hash)} .`, "success");
+      addLog(`T1: Giao dịch thành công. Hash: ${tx.hash} .`, "success");
       const blockNumber = receipt.blockNumber;
       const txData = {
         hash: tx.hash,
@@ -349,10 +345,10 @@ async function bridgeFromT1ToSepolia(i, amount) {
       walletT1.address,
       { value: amount, gasLimit: 500000 }
     );
-    addLog(`T1: Giao dịch đã gửi. Hash: ${getShortHash(tx.hash)}`, "bridge");
+    addLog(`T1: Giao dịch đã gửi. Hash: ${tx.hash}`, "bridge");
     const receipt = await tx.wait();
     if (receipt.status === 1) {
-      addLog(`T1: Giao dịch thành công. Hash: ${getShortHash(tx.hash)}`, "success");
+      addLog(`T1: Giao dịch thành công. Hash: ${tx.hash}`, "success");
       const txData = {
         hash: tx.hash,
         amount: amount.toString(),
@@ -437,7 +433,7 @@ function adjustLayout() {
   const screenWidth = screen.width;
   const headerHeight = Math.max(8, Math.floor(screenHeight * 0.15));
   headerBox.top = 0;
-  headerBox.height = headerHeight;
+  headerHeight = headerHeight;
   headerBox.width = "100%";
   descriptionBox.top = "25%";
   descriptionBox.height = Math.floor(screenHeight * 0.05);
@@ -518,6 +514,6 @@ screen.key(["C-down"], () => { logsBox.scroll(1); safeRender(); });
 
 safeRender();
 mainMenu.focus();
-addLog("Xin chào và chúc bạn may mắn!!", "system");
+addLog("Đừng quên đăng ký YT và Telegram @NTExhaust!!", "system");
 updateLogs();
 updateWalletData();
