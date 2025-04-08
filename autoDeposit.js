@@ -17,21 +17,21 @@ const logger = winston.createLogger({
     ]
 });
 
-// Danh sách RPC endpoints (fallback)
+// Danh sách RPC endpoints (fallback) - Đã cập nhật
 const SEPOLIA_RPCS = [
-    process.env.SEPOLIA_RPC || "https://ethereum-sepolia.rpc.subquery.network",
-    "https://1rpc.io/sepolia",
+    process.env.SEPOLIA_RPC || "https://ethereum-sepolia-rpc.publicnode.com", // RPC mới từ PublicNode
+    "https://rpc.sepolia.org",
     "https://rpc-sepolia.rockx.com"
 ];
 
 // Cấu hình từ biến môi trường
 const config = {
     SEPOLIA_RPCS,
-    T1_NETWORK: process.env.T1_NETWORK || "https://rpc.v006.t1protocol.com", // Cập nhật RPC T1
+    T1_NETWORK: process.env.T1_NETWORK || "https://rpc.v006.t1protocol.com",
     BRIDGE_ADDRESS: process.env.BRIDGE_ADDRESS || "0xafdf5cb097d6fb2eb8b1ffbab180e667458e18f4",
     PRIVATE_KEY: process.env.PRIVATE_KEY,
     AMOUNT_TO_DEPOSIT: process.env.AMOUNT_TO_DEPOSIT || "0.1", // ETH
-    GAS_LIMIT: process.env.GAS_LIMIT || "300000",
+    // GAS_LIMIT bị xóa để dùng Auto
     L2_GAS_LIMIT: process.env.L2_GAS_LIMIT || "500000",
     L2_RECIPIENT: process.env.L2_RECIPIENT || "0x4860CA818c3650Bc928dF43ea4eDA07704FC1581",
     INTERVAL_MINUTES: process.env.INTERVAL_MINUTES || "30"
@@ -117,6 +117,9 @@ async function getWorkingProvider(rpcs) {
         try {
             const provider = new ethers.providers.JsonRpcProvider(rpc);
             const network = await provider.getNetwork();
+            if (network.chainId !== 11155111) {
+                throw new Error(`Invalid chainId: ${network.chainId}, expected 11155111 (Sepolia)`);
+            }
             logger.info(`Connected to ${rpc} - Network: ${network.name} (chainId: ${network.chainId})`);
             return provider;
         } catch (error) {
@@ -203,15 +206,14 @@ async function autoDeposit() {
             throw new Error(`Insufficient balance. Required: ${config.AMOUNT_TO_DEPOSIT} ETH`);
         }
 
-        // Thực hiện deposit
+        // Thực hiện deposit với gas tự động
         logger.info(`Initiating deposit to bridge ${config.BRIDGE_ADDRESS} for L2 recipient ${config.L2_RECIPIENT}`);
         const tx = await bridgeContract.depositETHTo(
             config.L2_RECIPIENT,
             config.L2_GAS_LIMIT,
             "0x", // _data rỗng
             {
-                value: amountToDeposit,
-                gasLimit: config.GAS_LIMIT
+                value: amountToDeposit // Xóa gasLimit để dùng Auto
             }
         );
 
@@ -239,9 +241,8 @@ async function autoDeposit() {
                 const txError = await provider.call({
                     to: config.BRIDGE_ADDRESS,
                     data: tx.data,
-                    value: tx.value,
-                    gasLimit: tx.gasLimit
-                }, receipt.blockNumber - 1); // Gọi tại block trước đó
+                    value: tx.value
+                }, receipt.blockNumber - 1); // Gọi tại block trước đó, bỏ gasLimit
                 logger.error(`Revert reason: ${txError}`);
             } catch (callError) {
                 logger.error(`Failed to get revert reason: ${callError.message}`);
