@@ -33,20 +33,29 @@ const config = {
     AMOUNT_TO_DEPOSIT: process.env.AMOUNT_TO_DEPOSIT || "0.1", // ETH
     GAS_LIMIT: process.env.GAS_LIMIT || "300000",
     L2_GAS_LIMIT: process.env.L2_GAS_LIMIT || "200000", // Gas limit cho L2
+    L2_RECIPIENT: process.env.L2_RECIPIENT || "0x4860CA818c3650Bc928dF43ea4eDA07704FC1581", // Địa chỉ nhận trên L2 (mặc định là ví gửi)
     INTERVAL_MINUTES: process.env.INTERVAL_MINUTES || "30"
 };
 
-// ABI của bridge contract (từ Sepolia Etherscan)
+// ABI của bridge contract (cập nhật từ Optimism L1StandardBridge)
 const BRIDGE_ABI = [
     {
         "constant": false,
         "inputs": [
             {
-                "name": "_gasLimit",
+                "name": "_to",
+                "type": "address"
+            },
+            {
+                "name": "_l2Gas",
                 "type": "uint32"
+            },
+            {
+                "name": "_data",
+                "type": "bytes"
             }
         ],
-        "name": "depositETH",
+        "name": "depositETHTo",
         "outputs": [],
         "payable": true,
         "stateMutability": "payable",
@@ -113,6 +122,9 @@ async function autoDeposit() {
         if (!ethers.utils.isAddress(config.BRIDGE_ADDRESS)) {
             throw new Error(`Invalid BRIDGE_ADDRESS: ${config.BRIDGE_ADDRESS}`);
         }
+        if (!ethers.utils.isAddress(config.L2_RECIPIENT)) {
+            throw new Error(`Invalid L2_RECIPIENT: ${config.L2_RECIPIENT}`);
+        }
 
         // Kết nối với Sepolia network
         const provider = await getWorkingProvider(config.SEPOLIA_RPCS);
@@ -151,11 +163,16 @@ async function autoDeposit() {
         }
 
         // Thực hiện deposit
-        logger.info(`Initiating deposit to bridge ${config.BRIDGE_ADDRESS}`);
-        const tx = await bridgeContract.depositETH(config.L2_GAS_LIMIT, {
-            value: amountToDeposit,
-            gasLimit: config.GAS_LIMIT
-        });
+        logger.info(`Initiating deposit to bridge ${config.BRIDGE_ADDRESS} for L2 recipient ${config.L2_RECIPIENT}`);
+        const tx = await bridgeContract.depositETHTo(
+            config.L2_RECIPIENT,
+            config.L2_GAS_LIMIT,
+            "0x", // _data rỗng
+            {
+                value: amountToDeposit,
+                gasLimit: config.GAS_LIMIT
+            }
+        );
 
         logger.info(`Transaction submitted. Hash: ${tx.hash}`);
 
@@ -176,8 +193,12 @@ async function autoDeposit() {
         } else {
             logger.error("Deposit failed!");
             logger.error(`Transaction details: ${JSON.stringify(txDetails, null, 2)}`);
-            const txError = await provider.call(tx, receipt.blockNumber);
-            logger.error(`Revert reason: ${txError}`);
+            try {
+                const txError = await provider.call(tx, receipt.blockNumber);
+                logger.error(`Revert reason: ${txError}`);
+            } catch (callError) {
+                logger.error(`Failed to get revert reason: ${callError.message}`);
+            }
         }
 
         // Kiểm tra balance mới
