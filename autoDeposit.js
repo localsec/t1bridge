@@ -51,18 +51,33 @@ async function autoDeposit() {
 
         // Kết nối với Sepolia network
         logger.info(`Connecting to Sepolia RPC: ${config.SEPOLIA_RPC}`);
-        const provider = new ethers.providers.JsonRpcProvider(config.SEPOLIA_RPC);
-        
+        let provider;
+        try {
+            provider = new ethers.providers.JsonRpcProvider(config.SEPOLIA_RPC);
+        } catch (providerError) {
+            throw new Error(`Failed to initialize provider: ${providerError.message}`);
+        }
+
         // Kiểm tra kết nối mạng
-        const network = await provider.getNetwork();
+        logger.info("Checking network connection...");
+        const network = await provider.getNetwork().catch(err => {
+            throw new Error(`Network check failed: ${err.message}`);
+        });
         logger.info(`Connected to network: ${network.name} (chainId: ${network.chainId})`);
 
         // Khởi tạo wallet
-        const wallet = new ethers.Wallet(config.PRIVATE_KEY, provider);
+        logger.info("Initializing wallet...");
+        let wallet;
+        try {
+            wallet = new ethers.Wallet(config.PRIVATE_KEY, provider);
+        } catch (walletError) {
+            throw new Error(`Failed to initialize wallet: ${walletError.message}`);
+        }
         const walletAddress = await wallet.getAddress();
         logger.info(`Using wallet address: ${walletAddress}`);
 
         // Kết nối với bridge contract
+        logger.info(`Connecting to bridge contract at ${config.BRIDGE_ADDRESS}`);
         const bridgeContract = new ethers.Contract(
             config.BRIDGE_ADDRESS,
             BRIDGE_ABI,
