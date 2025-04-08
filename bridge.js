@@ -25,7 +25,7 @@ async function bridgeETH() {
     const balance = await wallet.getBalance();
     console.log(`Balance: ${ethers.formatEther(balance)} ETH`);
 
-    if (balance.lt(ethers.parseEther(AMOUNT_TO_DEPOSIT))) {
+    if (balance < ethers.parseEther(AMOUNT_TO_DEPOSIT)) {
       console.log('Not enough balance to bridge!');
       return;
     }
