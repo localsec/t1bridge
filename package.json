@@ -1,15 +1,20 @@
 {
-    "name": "eth-t1-bridge",
-    "version": "1.0.0",
-    "description": "Automated ETH Sepolia to T1 Protocol bridge",
-    "main": "bridge.js",
-    "scripts": {
-        "start": "node bridge.js",
-        "test": "echo \"Error: no test specified\" && exit 1"
-    },
-    "dependencies": {
-        "web3": "^1.7.0"
-    },
-    "author": "",
-    "license": "MIT"
+  "name": "LocalSec - T1 Auto Bridge",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [],
+  "author": "VinSenzo",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "blessed": "^0.1.81",
+    "dotenv": "^16.4.7",
+    "ethers": "^6.13.5",
+    "figlet": "^1.8.0",
+    "puppeteer": "^24.6.0"
+  }
 }
