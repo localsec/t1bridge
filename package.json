@@ -1,0 +1,15 @@
+{
+  "name": "t1bridge",
+  "version": "1.0.0",
+  "description": "Tool bridge token từ ETH Sepolia sang T1 Network",
+  "main": "bridge.js",
+  "scripts": {
+    "start": "node bridge.js"
+  },
+  "author": "longlt",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "ethers": "^6.7.0"
+  }
+}
