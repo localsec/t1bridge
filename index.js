@@ -6,7 +6,7 @@ import puppeteer from "puppeteer";
 
 const RPC_URL_SEPOLIA = process.env.RPC_URL_SEPOLIA;
 const RPC_URL_T1 = process.env.RPC_URL_T1;
-const PRIVATE_KEY = process.env.PRIVATE_KEY;
+const PRIVATE_KEYS = process.env.PRIVATE_KEYS.split(","); // Giả sử các khóa riêng được lưu trong .env dưới dạng danh sách cách nhau bằng dấu phẩy
 const NETWORK_NAME = "SEPOLIA & T1";
 const WEB_URL_DEPOSIT = "https://devnet.t1protocol.com/bridge?transactionType=Deposit";
 const WEB_URL_WITHDRAW = "https://devnet.t1protocol.com/bridge?transactionType=Withdraw";
@@ -18,19 +18,11 @@ const BridgeABI = [
   "function sendMessage(address _to, uint256 _value, bytes _message, uint256 _gasLimit, uint64 _destChainId, address _callbackAddress) external payable"
 ];
 
-
-let walletInfo = {
-  address: "",
-  balanceEthSepolia: "0.00",
-  balanceEthT1: "0.00",
-  network: NETWORK_NAME,
-  status: "Initializing"
-};
-
+// Danh sách thông tin ví
+let walletsInfo = [];
 let transactionLogs = [];
 let bridgeRunning = false;
 let bridgeCancelled = false;
-let globalWallet = null;
 
 function getShortAddress(address) {
   return address.slice(0, 6) + "..." + address.slice(-4);
@@ -75,7 +67,7 @@ function updateLogs() {
 function clearTransactionLogs() {
   transactionLogs = [];
   updateLogs();
-  addLog("Transaction logs telah dihapus.", "system");
+  addLog("Nhật ký giao dịch đã được xóa.", "system");
 }
 
 async function waitWithCancel(delay, type) {
@@ -91,7 +83,7 @@ async function waitWithCancel(delay, type) {
 
 const screen = blessed.screen({
   smartCSR: true,
-  title: "T1 Bridge",
+  title: "Cầu T1",
   fullUnicode: true,
   mouse: true
 });
@@ -109,8 +101,8 @@ const headerBox = blessed.box({
   style: { fg: "white", bg: "default" }
 });
 
-figlet.text("LocalSec".toUpperCase(), { font: "Speed", horizontalLayout: "default" }, (err, data) => {
-  if (err) headerBox.setContent("{center}{bold}LocalSec{/bold}{/center}");
+figlet.text("NT EXHAUST".toUpperCase(), { font: "Speed", horizontalLayout: "default" }, (err, data) => {
+  if (err) headerBox.setContent("{center}{bold}NT Exhaust{/bold}{/center}");
   else headerBox.setContent(`{center}{bold}{bright-cyan-fg}${data}{/bright-cyan-fg}{/bold}{/center}`);
   safeRender();
 });
@@ -118,13 +110,13 @@ figlet.text("LocalSec".toUpperCase(), { font: "Speed", horizontalLayout: "defaul
 const descriptionBox = blessed.box({
   left: "center",
   width: "100%",
-  content: "{center}{bold}{bright-yellow-fg}✦ ✦ T1 AUTO BRIDGE ✦ ✦{/bright-yellow-fg}{/bold}{/center}",
+  content: "{center}{bold}{bright-yellow-fg}✦ ✦ CẦU TỰ ĐỘNG T1 ✦ ✦{/bright-yellow-fg}{/bold}{/center}",
   tags: true,
   style: { fg: "white", bg: "default" }
 });
 
 const logsBox = blessed.box({
-  label: " Transaction Logs ",
+  label: " Nhật Ký Giao Dịch ",
   left: 0,
   border: { type: "line" },
   scrollable: true,
@@ -139,11 +131,11 @@ const logsBox = blessed.box({
 });
 
 const walletBox = blessed.box({
-  label: " Informasi Wallet ",
+  label: " Thông Tin Ví ",
   border: { type: "line" },
   tags: true,
   style: { border: { fg: "magenta" }, fg: "white", bg: "default", align: "left", valign: "top" },
-  content: "Loading data wallet..."
+  content: "Đang tải dữ liệu ví..."
 });
 
 const mainMenu = blessed.list({
@@ -158,7 +150,7 @@ const mainMenu = blessed.list({
 });
 
 const bridgeSubMenu = blessed.list({
-  label: " T1 Bridge Sub Menu ",
+  label: " Menu Phụ Cầu T1 ",
   left: "60%",
   keys: true,
   vi: true,
@@ -176,7 +168,7 @@ const promptBox = blessed.prompt({
   width: "60%",
   top: "center",
   left: "center",
-  label: "{bright-blue-fg}Bridge Prompt{/bright-blue-fg}",
+  label: "{bright-blue-fg}Nhập Dữ Liệu Cầu{/bright-blue-fg}",
   tags: true,
   keys: true,
   vi: true,
@@ -192,31 +184,35 @@ screen.append(mainMenu);
 screen.append(bridgeSubMenu);
 
 function getMainMenuItems() {
-  let items = ["T1 Bridge", "Clear Transaction Logs", "Refresh", "Exit"];
+  let items = ["Cầu T1", "Xóa Nhật Ký Giao Dịch", "Làm Mới", "Thoát"];
   if (bridgeRunning) {
-    items.unshift("Stop All Transactions");
+    items.unshift("Dừng Tất Cả Giao Dịch");
   }
   return items;
 }
 
 function getBridgeMenuItems() {
-  let items = ["Auto Bridge ETH Sepolia & T1", "Clear Transaction Logs", "Back To Main Menu", "Refresh"];
+  let items = ["Cầu Tự Động ETH Sepolia & T1", "Xóa Nhật Ký Giao Dịch", "Quay Lại Menu Chính", "Làm Mới"];
   if (bridgeRunning) {
-    items.splice(1, 0, "Stop Transaction");
+    items.splice(1, 0, "Dừng Giao Dịch");
   }
   return items;
 }
 
 function updateWallet() {
-  const shortAddress = walletInfo.address ? getShortAddress(walletInfo.address) : "N/A";
-  const ethSepolia = walletInfo.balanceEthSepolia ? Number(walletInfo.balanceEthSepolia).toFixed(4) : "0.0000";
-  const ethT1 = walletInfo.balanceEthT1 ? Number(walletInfo.balanceEthT1).toFixed(4) : "0.0000";
-  const content = `┌── Address          : {bright-yellow-fg}${shortAddress}{/bright-yellow-fg}
+  let content = "";
+  walletsInfo.forEach((wallet, index) => {
+    const shortAddress = wallet.address ? getShortAddress(wallet.address) : "Không có";
+    const ethSepolia = wallet.balanceEthSepolia ? Number(wallet.balanceEthSepolia).toFixed(4) : "0.0000";
+    const ethT1 = wallet.balanceEthT1 ? Number(wallet.balanceEthT1).toFixed(4) : "0.0000";
+    content += `Ví ${index + 1}:
+┌── Địa chỉ          : {bright-yellow-fg}${shortAddress}{/bright-yellow-fg}
 │   ├── ETH Sepolia  : {bright-green-fg}${ethSepolia}{/bright-green-fg}
 │   └── ETH T1       : {bright-green-fg}${ethT1}{/bright-green-fg}
-└── Networks         : {bright-cyan-fg}${NETWORK_NAME}{/bright-cyan-fg}
-`;
-  walletBox.setContent(content);
+└── Mạng             : {bright-cyan-fg}${NETWORK_NAME}{/bright-cyan-fg}
+----------------------------------------\n`;
+  });
+  walletBox.setContent(content || "Không có ví nào được tải.");
   safeRender();
 }
 
@@ -224,24 +220,30 @@ async function updateWalletData() {
   try {
     const providerSepolia = new ethers.JsonRpcProvider(RPC_URL_SEPOLIA);
     const providerT1 = new ethers.JsonRpcProvider(RPC_URL_T1);
-    const wallet = new ethers.Wallet(PRIVATE_KEY, providerSepolia);
-    globalWallet = wallet;
-    walletInfo.address = wallet.address;
-    const ethBalanceSepolia = await providerSepolia.getBalance(wallet.address);
-    walletInfo.balanceEthSepolia = ethers.formatEther(ethBalanceSepolia);
-    const ethBalanceT1 = await providerT1.getBalance(wallet.address);
-    walletInfo.balanceEthT1 = ethers.formatEther(ethBalanceT1);
+    walletsInfo = [];
+    for (const privateKey of PRIVATE_KEYS) {
+      const wallet = new ethers.Wallet(privateKey.trim(), providerSepolia);
+      const ethBalanceSepolia = await providerSepolia.getBalance(wallet.address);
+      const ethBalanceT1 = await providerT1.getBalance(wallet.address);
+      walletsInfo.push({
+        address: wallet.address,
+        balanceEthSepolia: ethers.formatEther(ethBalanceSepolia),
+        balanceEthT1: ethers.formatEther(ethBalanceT1),
+        network: NETWORK_NAME,
+        walletInstance: wallet
+      });
+    }
     updateWallet();
-    addLog("Saldo & Wallet Updated !!", "system");
+    addLog("Số dư & Ví đã được cập nhật cho tất cả ví!!", "system");
   } catch (error) {
-    addLog("Gagal mengambil data wallet: " + error.message, "system");
+    addLog("Không thể lấy dữ liệu ví: " + error.message, "system");
   }
 }
 
 function stopAllTransactions() {
   if (bridgeRunning) {
     bridgeCancelled = true;
-    addLog("Stop All Transactions command received. Semua transaksi telah dihentikan.", "system");
+    addLog("Lệnh Dừng Tất Cả Giao Dịch đã được nhận. Tất cả giao dịch đã dừng.", "system");
   }
 }
 
@@ -255,7 +257,7 @@ async function injectTxDataToWeb(txData, transactionType) {
     });
     const page = await browser.newPage();
     page.on("console", (msg) => {
-      console.log("PAGE LOG:", msg.text());
+      console.log("NHẬT KÝ TRANG:", msg.text());
     });
 
     await page.goto(targetURL, { waitUntil: "networkidle2" });
@@ -274,8 +276,8 @@ async function injectTxDataToWeb(txData, transactionType) {
             },
             version: 0
           };
-        const lowerWallet = wallet.toLowerCase();
-        if (!stateObj.state.frontTransactions) {
+      const lowerWallet = wallet.toLowerCase();
+      if (!stateObj.state.frontTransactions) {
         stateObj.state.frontTransactions = {};
       }
       if (!stateObj.state.frontTransactions[lowerWallet]) {
@@ -287,16 +289,17 @@ async function injectTxDataToWeb(txData, transactionType) {
     }, { wallet: txData.from, txData });
     await new Promise((resolve) => setTimeout(resolve, 5000));
     await browser.close();
-    addLog("T1: Succesfully Inject Transaction To Web.", "success");
+    addLog("T1: Thành công đưa giao dịch vào web.", "success");
   } catch (error) {
-    addLog("Inject Error: " + error.message, "error");
+    addLog("Lỗi đưa dữ liệu: " + error.message, "error");
   }
 }
 
-async function bridgeFromSepoliaToT1(i, amount) {
-  addLog(`T1: Melakukan Bridge Sepolia ➯  T1, Ammount ${ethers.formatEther(amount)} ETH `, "bridge");
+async function bridgeFromSepoliaToT1(walletIndex, i, amount) {
+  const walletInfo = walletsInfo[walletIndex];
+  addLog(`T1: Thực hiện cầu từ Sepolia ➯ T1 cho ví ${getShortAddress(walletInfo.address)}, Số tiền ${ethers.formatEther(amount)} ETH`, "bridge");
   const providerSepolia = new ethers.JsonRpcProvider(RPC_URL_SEPOLIA);
-  const walletSepolia = new ethers.Wallet(PRIVATE_KEY, providerSepolia);
+  const walletSepolia = walletInfo.walletInstance.connect(providerSepolia);
   const contractSepolia = new ethers.Contract(Router_Sepolia, BridgeABI, walletSepolia);
   const extraFee = ethers.parseEther("0.000000000000168");
   const totalValue = amount + extraFee;
@@ -310,10 +313,10 @@ async function bridgeFromSepoliaToT1(i, amount) {
       walletSepolia.address,
       { value: totalValue, gasLimit: 500000 }
     );
-    addLog(`T1: Transaction Sent. Hash: ${getShortHash(tx.hash)}`, "bridge");
+    addLog(`T1: Giao dịch đã gửi. Hash: ${getShortHash(tx.hash)}`, "bridge");
     const receipt = await tx.wait();
     if (receipt.status === 1) {
-      addLog(`T1: Transaction Successfully. Hash: ${getShortHash(tx.hash)} .`, "success");
+      addLog(`T1: Giao dịch thành công. Hash: ${getShortHash(tx.hash)}.`, "success");
       const blockNumber = receipt.blockNumber;
       const txData = {
         hash: tx.hash,
@@ -328,17 +331,18 @@ async function bridgeFromSepoliaToT1(i, amount) {
       await injectTxDataToWeb(txData, "Deposit");
       await updateWalletData();
     } else {
-      addLog(`T1: Transaksi gagal.`, "error");
+      addLog(`T1: Giao dịch thất bại.`, "error");
     }
   } catch (error) {
-    addLog(`T1: Error - ${error.message}`, "error");
+    addLog(`T1: Lỗi - ${error.message}`, "error");
   }
 }
 
-async function bridgeFromT1ToSepolia(i, amount) {
-  addLog(`T1: Melakukan Bridge T1 ➯  Sepolia, Ammount ${ethers.formatEther(amount)} ETH `, "bridge");
+async function bridgeFromT1ToSepolia(walletIndex, i, amount) {
+  const walletInfo = walletsInfo[walletIndex];
+  addLog(`T1: Thực hiện cầu từ T1 ➯ Sepolia cho ví ${getShortAddress(walletInfo.address)}, Số tiền ${ethers.formatEther(amount)} ETH`, "bridge");
   const providerT1 = new ethers.JsonRpcProvider(RPC_URL_T1);
-  const walletT1 = new ethers.Wallet(PRIVATE_KEY, providerT1);
+  const walletT1 = walletInfo.walletInstance.connect(providerT1);
   const contractT1 = new ethers.Contract(Router_T1, BridgeABI, walletT1);
   try {
     const tx = await contractT1.sendMessage(
@@ -350,10 +354,10 @@ async function bridgeFromT1ToSepolia(i, amount) {
       walletT1.address,
       { value: amount, gasLimit: 500000 }
     );
-    addLog(`T1: Transaction Sent. Hash: ${getShortHash(tx.hash)}`, "bridge");
+    addLog(`T1: Giao dịch đã gửi. Hash: ${getShortHash(tx.hash)}`, "bridge");
     const receipt = await tx.wait();
     if (receipt.status === 1) {
-      addLog(`T1: Transaction Successfully. Hash: ${getShortHash(tx.hash)}`, "success");
+      addLog(`T1: Giao dịch thành công. Hash: ${getShortHash(tx.hash)}`, "success");
       const txData = {
         hash: tx.hash,
         amount: amount.toString(),
@@ -367,31 +371,30 @@ async function bridgeFromT1ToSepolia(i, amount) {
       await injectTxDataToWeb(txData, "Withdraw");
       await updateWalletData();
     } else {
-      addLog(`T1: Transaction Failed.`, "error");
+      addLog(`T1: Giao dịch thất bại.`, "error");
     }
   } catch (error) {
-    addLog(`T1: Error - ${error.message}`, "error");
+    addLog(`T1: Lỗi - ${error.message}`, "error");
   }
 }
 
-
 async function runAutoBridge() {
   promptBox.setFront();
-  promptBox.readInput("Masukkan Jumlah Berapa Kali Bridge:", "", async (err, value) => {
+  promptBox.readInput("Nhập số lần thực hiện cầu:", "", async (err, value) => {
     promptBox.hide();
     safeRender();
     if (err || !value) {
-      addLog("T1 Bridge: Input tidak valid atau dibatalkan.", "bridge");
+      addLog("T1 Bridge: Đầu vào không hợp lệ hoặc bị hủy.", "bridge");
       return;
     }
     const loopCount = parseInt(value);
     if (isNaN(loopCount)) {
-      addLog("T1 Bridge: Input harus berupa angka.", "bridge");
+      addLog("T1 Bridge: Đầu vào phải là số.", "bridge");
       return;
     }
-    addLog(`T1 Bridge: Anda memasukkan ${loopCount} Kali Auto bridge.`, "bridge");
+    addLog(`T1 Bridge: Bạn đã nhập ${loopCount} lần cầu tự động.`, "bridge");
     if (bridgeRunning) {
-      addLog("T1 Bridge: Transaksi Sedang Berjalan. Silahkan stop transaksi terlebih dahulu.", "system");
+      addLog("T1 Bridge: Giao dịch đang chạy. Vui lòng dừng giao dịch trước.", "system");
       return;
     }
     bridgeRunning = true;
@@ -400,28 +403,30 @@ async function runAutoBridge() {
     bridgeSubMenu.setItems(getBridgeMenuItems());
     bridgeSubMenu.show();
     safeRender();
+
     for (let i = 1; i <= loopCount; i++) {
       if (bridgeCancelled) {
-        addLog(`T1 Bridge: Auto bridge dihentikan pada cycle ke ${i}.`, "bridge");
+        addLog(`T1 Bridge: Cầu tự động dừng tại chu kỳ ${i}.`, "bridge");
         break;
       }
+      const walletIndex = Math.floor(Math.random() * walletsInfo.length); // Chọn ví ngẫu nhiên
       const randomAmount = getRandomNumber(0.0001, 0.001);
       const amount = ethers.parseEther(randomAmount.toFixed(6));
       if (i % 2 === 1) {
-        await bridgeFromSepoliaToT1(i, amount);
+        await bridgeFromSepoliaToT1(walletIndex, i, amount);
       } else {
-        await bridgeFromT1ToSepolia(i, amount);
+        await bridgeFromT1ToSepolia(walletIndex, i, amount);
       }
 
       if (i < loopCount) {
         const delayTime = getRandomDelay();
         const minutes = Math.floor(delayTime / 60000);
         const seconds = Math.floor((delayTime % 60000) / 1000);
-        addLog(`T1 Bridge: Bridge Ke  ${i} Selesai.`, "bridge");
-        addLog(`T1 Bridge: Menunggu ${minutes} menit ${seconds} detik sebelum transaksi berikutnya...`, "bridge");
+        addLog(`T1 Bridge: Cầu thứ ${i} hoàn tất.`, "bridge");
+        addLog(`T1 Bridge: Đợi ${minutes} phút ${seconds} giây trước giao dịch tiếp theo...`, "bridge");
         await waitWithCancel(delayTime, "bridge");
         if (bridgeCancelled) {
-          addLog("T1 Bridge: Auto bridge dihentikan saat waktu tunggu.", "bridge");
+          addLog("T1 Bridge: Cầu tự động dừng trong thời gian chờ.", "bridge");
           break;
         }
       }
@@ -430,7 +435,7 @@ async function runAutoBridge() {
     mainMenu.setItems(getMainMenuItems());
     bridgeSubMenu.setItems(getBridgeMenuItems());
     safeRender();
-    addLog("T1 Bridge: Auto bridge selesai.", "bridge");
+    addLog("T1 Bridge: Cầu tự động hoàn tất.", "bridge");
   });
 }
 
@@ -467,50 +472,50 @@ adjustLayout();
 
 mainMenu.on("select", (item) => {
   const selected = item.getText();
-  if (selected === "Stop All Transactions") {
+  if (selected === "Dừng Tất Cả Giao Dịch") {
     stopAllTransactions();
     mainMenu.setItems(getMainMenuItems());
     mainMenu.focus();
     safeRender();
-  } else if (selected === "T1 Bridge") {
+  } else if (selected === "Cầu T1") {
     bridgeSubMenu.show();
     bridgeSubMenu.focus();
     safeRender();
-  } else if (selected === "Clear Transaction Logs") {
+  } else if (selected === "Xóa Nhật Ký Giao Dịch") {
     clearTransactionLogs();
-  } else if (selected === "Refresh") {
+  } else if (selected === "Làm Mới") {
     updateWalletData();
     updateLogs();
     safeRender();
-    addLog("Refreshed", "system");
-  } else if (selected === "Exit") {
+    addLog("Đã làm mới", "system");
+  } else if (selected === "Thoát") {
     process.exit(0);
   }
 });
 
 bridgeSubMenu.on("select", (item) => {
   const selected = item.getText();
-  if (selected === "Auto Bridge ETH Sepolia & T1") {
+  if (selected === "Cầu Tự Động ETH Sepolia & T1") {
     runAutoBridge();
-  } else if (selected === "Stop Transaction") {
+  } else if (selected === "Dừng Giao Dịch") {
     if (bridgeRunning) {
       bridgeCancelled = true;
-      addLog("T1 Bridge: Perintah Stop Transaction diterima.", "bridge");
+      addLog("T1 Bridge: Lệnh dừng giao dịch đã được nhận.", "bridge");
     } else {
-      addLog("T1 Bridge: Tidak ada transaksi yang berjalan.", "bridge");
+      addLog("T1 Bridge: Không có giao dịch nào đang chạy.", "bridge");
     }
-  } else if (selected === "Clear Transaction Logs") {
+  } else if (selected === "Xóa Nhật Ký Giao Dịch") {
     clearTransactionLogs();
-  } else if (selected === "Back To Main Menu") {
+  } else if (selected === "Quay Lại Menu Chính") {
     bridgeSubMenu.hide();
     mainMenu.show();
     mainMenu.focus();
     safeRender();
-  } else if (selected === "Refresh") {
+  } else if (selected === "Làm Mới") {
     updateWalletData();
     updateLogs();
     safeRender();
-    addLog("Refreshed", "system");
+    addLog("Đã làm mới", "system");
   }
 });
 
@@ -520,6 +525,6 @@ screen.key(["C-down"], () => { logsBox.scroll(1); safeRender(); });
 
 safeRender();
 mainMenu.focus();
-addLog("LocalSec - Auto Bridge!!", "system");
+addLog("Đừng quên theo dõi YT và Telegram @NTExhaust!!", "system");
 updateLogs();
 updateWalletData();
