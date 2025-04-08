@@ -90,7 +90,7 @@ async function waitWithCancel(delay, type) {
 
 const screen = blessed.screen({
   smartCSR: true,
-  title: "Cầu T1",
+  title: "T1 BRIDGE",
   fullUnicode: true,
   mouse: true
 });
