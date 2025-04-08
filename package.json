@@ -1,15 +1,20 @@
 {
-  "name": "t1bridge",
+  "name": "LocalSec - T1 Bridge",
   "version": "1.0.0",
-  "description": "Tool bridge token từ ETH Sepolia sang T1 Network",
-  "main": "bridge.js",
+  "main": "index.js",
+  "type": "module",
   "scripts": {
-    "start": "node bridge.js"
+    "start": "node index.js"
   },
-  "author": "longlt",
-  "license": "MIT",
+  "keywords": [],
+  "author": "LocalSec",
+  "license": "ISC",
+  "description": "",
   "dependencies": {
-    "dotenv": "^16.3.1",
-    "ethers": "^6.7.0"
+    "blessed": "^0.1.81",
+    "dotenv": "^16.4.7",
+    "ethers": "^6.13.5",
+    "figlet": "^1.8.0",
+    "puppeteer": "^24.6.0"
   }
 }
