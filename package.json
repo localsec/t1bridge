@@ -1,0 +1,15 @@
+{
+  "name": "t1-auto-deposit",
+  "version": "1.0.0",
+  "description": "Auto deposit Sepolia ETH to T1 via bridge contract",
+  "main": "src/autoDeposit.js",
+  "scripts": {
+    "start": "node src/autoDeposit.js"
+  },
+  "dependencies": {
+    "ethers": "^5.7.2",
+    "dotenv": "^16.0.3"
+  },
+  "author": "Your Name",
+  "license": "MIT"
+}
