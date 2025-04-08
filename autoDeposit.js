@@ -38,15 +38,29 @@ const BRIDGE_ABI = [
  * Thực hiện deposit ETH từ Sepolia sang T1 qua bridge contract
  */
 async function autoDeposit() {
+    logger.info("Starting deposit process...");
+    
     try {
-        // Kiểm tra private key
+        // Kiểm tra cấu hình
         if (!config.PRIVATE_KEY) {
-            throw new Error("PRIVATE_KEY is not set in .env");
+            throw new Error("PRIVATE_KEY is not set in .env file");
+        }
+        if (!ethers.utils.isAddress(config.BRIDGE_ADDRESS)) {
+            throw new Error(`Invalid BRIDGE_ADDRESS: ${config.BRIDGE_ADDRESS}`);
         }
 
         // Kết nối với Sepolia network
+        logger.info(`Connecting to Sepolia RPC: ${config.SEPOLIA_RPC}`);
         const provider = new ethers.providers.JsonRpcProvider(config.SEPOLIA_RPC);
+        
+        // Kiểm tra kết nối mạng
+        const network = await provider.getNetwork();
+        logger.info(`Connected to network: ${network.name} (chainId: ${network.chainId})`);
+
+        // Khởi tạo wallet
         const wallet = new ethers.Wallet(config.PRIVATE_KEY, provider);
+        const walletAddress = await wallet.getAddress();
+        logger.info(`Using wallet address: ${walletAddress}`);
 
         // Kết nối với bridge contract
         const bridgeContract = new ethers.Contract(
@@ -57,6 +71,7 @@ async function autoDeposit() {
 
         // Số lượng ETH để deposit
         const amountToDeposit = ethers.utils.parseEther(config.AMOUNT_TO_DEPOSIT);
+        logger.info(`Amount to deposit: ${config.AMOUNT_TO_DEPOSIT} ETH`);
 
         // Kiểm tra balance
         const balance = await wallet.getBalance();
@@ -67,7 +82,7 @@ async function autoDeposit() {
         }
 
         // Thực hiện deposit
-        logger.info(`Initiating deposit of ${config.AMOUNT_TO_DEPOSIT} ETH to bridge ${config.BRIDGE_ADDRESS}`);
+        logger.info(`Initiating deposit to bridge ${config.BRIDGE_ADDRESS}`);
         const tx = await bridgeContract.depositETH(amountToDeposit, {
             value: amountToDeposit,
             gasLimit: config.GAS_LIMIT
@@ -79,7 +94,6 @@ async function autoDeposit() {
         logger.info("Waiting for transaction confirmation...");
         const receipt = await tx.wait();
 
-        // Thông tin chi tiết về giao dịch
         const txDetails = {
             hash: receipt.transactionHash,
             blockNumber: receipt.blockNumber,
@@ -100,9 +114,12 @@ async function autoDeposit() {
         logger.info(`New balance: ${ethers.utils.formatEther(newBalance)} ETH`);
 
     } catch (error) {
-        logger.error(`Deposit failed with error: ${error.message}`);
+        logger.error(`Deposit process failed: ${error.message}`);
         if (error.transaction) {
             logger.error(`Failed transaction hash: ${error.transaction.hash}`);
+        }
+        if (error.reason) {
+            logger.error(`Reason: ${error.reason}`);
         }
     }
 }
