@@ -19,7 +19,7 @@ const logger = winston.createLogger({
 
 // Danh sách RPC endpoints (fallback)
 const SEPOLIA_RPCS = [
-    process.env.SEPOLIA_RPC || "https://ethereum-sepolia.rpc.subquery.network", // Cập nhật RPC Sepolia
+    process.env.SEPOLIA_RPC || "https://ethereum-sepolia.rpc.subquery.network",
     "https://1rpc.io/sepolia",
     "https://rpc-sepolia.rockx.com"
 ];
@@ -27,8 +27,8 @@ const SEPOLIA_RPCS = [
 // Cấu hình từ biến môi trường
 const config = {
     SEPOLIA_RPCS,
-    T1_NETWORK: process.env.T1_NETWORK || "https://rpc.v006.t1protocol.com/",
-    BRIDGE_ADDRESS: process.env.BRIDGE_ADDRESS || "0xAFdF5cb097D6FB2EB8B1FFbAB180e667458e18F4",
+    T1_NETWORK: process.env.T1_NETWORK || "https://rpc.v006.t1protocol.com", // Cập nhật RPC T1
+    BRIDGE_ADDRESS: process.env.BRIDGE_ADDRESS || "0xafdf5cb097d6fb2eb8b1ffbab180e667458e18f4",
     PRIVATE_KEY: process.env.PRIVATE_KEY,
     AMOUNT_TO_DEPOSIT: process.env.AMOUNT_TO_DEPOSIT || "0.1", // ETH
     GAS_LIMIT: process.env.GAS_LIMIT || "300000",
