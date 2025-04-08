@@ -19,7 +19,7 @@ const logger = winston.createLogger({
 
 // Danh sách RPC endpoints (fallback)
 const SEPOLIA_RPCS = [
-    process.env.SEPOLIA_RPC || "https://rpc.sepolia.org",
+    process.env.SEPOLIA_RPC || "https://ethereum-sepolia.rpc.subquery.network", // Cập nhật RPC Sepolia
     "https://1rpc.io/sepolia",
     "https://rpc-sepolia.rockx.com"
 ];
@@ -27,18 +27,18 @@ const SEPOLIA_RPCS = [
 // Cấu hình từ biến môi trường
 const config = {
     SEPOLIA_RPCS,
-    T1_NETWORK: process.env.T1_NETWORK || "https://devnet-rpc.t1protocol.com",
+    T1_NETWORK: process.env.T1_NETWORK || "https://rpc.v006.t1protocol.com/",
     BRIDGE_ADDRESS: process.env.BRIDGE_ADDRESS || "0xAFdF5cb097D6FB2EB8B1FFbAB180e667458e18F4",
     PRIVATE_KEY: process.env.PRIVATE_KEY,
     AMOUNT_TO_DEPOSIT: process.env.AMOUNT_TO_DEPOSIT || "0.1", // ETH
     GAS_LIMIT: process.env.GAS_LIMIT || "300000",
-    L2_GAS_LIMIT: process.env.L2_GAS_LIMIT || "500000", // Gas limit cho L2
+    L2_GAS_LIMIT: process.env.L2_GAS_LIMIT || "500000",
     L2_RECIPIENT: process.env.L2_RECIPIENT || "0x4860CA818c3650Bc928dF43ea4eDA07704FC1581",
     INTERVAL_MINUTES: process.env.INTERVAL_MINUTES || "30"
 };
 
-// ABI của bridge contract (Proxy contract từ bạn cung cấp)
-const BRIDGE_ABI = [
+// ABI của proxy contract
+const PROXY_ABI = [
     {
         "inputs": [
             {"internalType": "address", "name": "_logic", "type": "address"},
@@ -77,7 +77,7 @@ const BRIDGE_ABI = [
     {"stateMutability": "payable", "type": "receive"}
 ];
 
-// ABI của implementation contract (dùng để gọi depositETHTo qua proxy)
+// ABI của implementation contract (Optimism L1StandardBridge)
 const IMPLEMENTATION_ABI = [
     {
         "constant": false,
@@ -91,8 +91,22 @@ const IMPLEMENTATION_ABI = [
         "payable": true,
         "stateMutability": "payable",
         "type": "function"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {"indexed": true, "internalType": "address", "name": "_from", "type": "address"},
+            {"indexed": true, "internalType": "address", "name": "_to", "type": "address"},
+            {"indexed": false, "internalType": "uint256", "name": "_amount", "type": "uint256"},
+            {"indexed": false, "internalType": "bytes", "name": "_data", "type": "bytes"}
+        ],
+        "name": "ETHDepositInitiated",
+        "type": "event"
     }
 ];
+
+// Storage slot cho implementation (EIP-1967)
+const IMPLEMENTATION_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
 
 /**
  * Thử kết nối với một RPC endpoint khả dụng
@@ -110,6 +124,21 @@ async function getWorkingProvider(rpcs) {
         }
     }
     throw new Error("No working RPC endpoints available");
+}
+
+/**
+ * Lấy địa chỉ implementation từ proxy (EIP-1967)
+ */
+async function getImplementationAddress(provider, proxyAddress) {
+    try {
+        const implHex = await provider.getStorageAt(proxyAddress, IMPLEMENTATION_SLOT);
+        const implAddress = ethers.utils.getAddress(ethers.utils.hexDataSlice(implHex, 12));
+        logger.info(`Implementation address: ${implAddress}`);
+        return implAddress;
+    } catch (error) {
+        logger.error(`Failed to get implementation address: ${error.message}`);
+        throw error;
+    }
 }
 
 /**
@@ -139,20 +168,28 @@ async function autoDeposit() {
         const walletAddress = await wallet.getAddress();
         logger.info(`Using wallet address: ${walletAddress}`);
 
-        // Kết nối với bridge contract (dùng ABI của proxy)
-        logger.info(`Connecting to bridge contract at ${config.BRIDGE_ADDRESS}`);
-        const bridgeContract = new ethers.Contract(
-            config.BRIDGE_ADDRESS,
-            IMPLEMENTATION_ABI, // Dùng ABI của implementation để gọi hàm
-            wallet
-        );
-
-        // Kiểm tra contract có tồn tại không
-        const code = await provider.getCode(config.BRIDGE_ADDRESS);
-        if (code === "0x") {
+        // Kiểm tra proxy contract
+        const proxyCode = await provider.getCode(config.BRIDGE_ADDRESS);
+        if (proxyCode === "0x") {
             throw new Error(`No contract deployed at ${config.BRIDGE_ADDRESS}`);
         }
-        logger.info("Bridge contract exists and is callable");
+        logger.info("Proxy contract exists");
+
+        // Lấy địa chỉ implementation
+        const implAddress = await getImplementationAddress(provider, config.BRIDGE_ADDRESS);
+        const implCode = await provider.getCode(implAddress);
+        if (implCode === "0x") {
+            throw new Error(`No implementation contract deployed at ${implAddress}`);
+        }
+        logger.info("Implementation contract exists and is callable");
+
+        // Kết nối với bridge contract qua proxy
+        logger.info(`Connecting to bridge contract at ${config.BRIDGE_ADDRESS} (implementation: ${implAddress})`);
+        const bridgeContract = new ethers.Contract(
+            config.BRIDGE_ADDRESS, // Gọi qua proxy
+            IMPLEMENTATION_ABI,
+            wallet
+        );
 
         // Số lượng ETH để deposit
         const amountToDeposit = ethers.utils.parseEther(config.AMOUNT_TO_DEPOSIT);
@@ -166,7 +203,7 @@ async function autoDeposit() {
             throw new Error(`Insufficient balance. Required: ${config.AMOUNT_TO_DEPOSIT} ETH`);
         }
 
-        // Thực hiện deposit qua proxy
+        // Thực hiện deposit
         logger.info(`Initiating deposit to bridge ${config.BRIDGE_ADDRESS} for L2 recipient ${config.L2_RECIPIENT}`);
         const tx = await bridgeContract.depositETHTo(
             config.L2_RECIPIENT,
@@ -188,7 +225,8 @@ async function autoDeposit() {
             hash: receipt.transactionHash,
             blockNumber: receipt.blockNumber,
             gasUsed: ethers.utils.formatUnits(receipt.gasUsed, "wei"),
-            status: receipt.status === 1 ? "Success" : "Failed"
+            status: receipt.status === 1 ? "Success" : "Failed",
+            implementation: implAddress
         };
 
         if (receipt.status === 1) {
@@ -198,10 +236,18 @@ async function autoDeposit() {
             logger.error("Deposit failed!");
             logger.error(`Transaction details: ${JSON.stringify(txDetails, null, 2)}`);
             try {
-                const txError = await provider.call(tx, receipt.blockNumber);
+                const txError = await provider.call({
+                    to: config.BRIDGE_ADDRESS,
+                    data: tx.data,
+                    value: tx.value,
+                    gasLimit: tx.gasLimit
+                }, receipt.blockNumber - 1); // Gọi tại block trước đó
                 logger.error(`Revert reason: ${txError}`);
             } catch (callError) {
                 logger.error(`Failed to get revert reason: ${callError.message}`);
+                if (callError.data) {
+                    logger.error(`Revert data: ${callError.data}`);
+                }
             }
         }
 
