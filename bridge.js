@@ -10,23 +10,23 @@ const {
   L2_GAS_LIMIT
 } = process.env;
 
-const provider = new ethers.providers.JsonRpcProvider(SEPOLIA_RPC);
+const provider = new ethers.JsonRpcProvider(SEPOLIA_RPC);  // đúng cú pháp ethers v6
 const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
 
 async function sendETH() {
   try {
     const balance = await wallet.getBalance();
-    const amountInWei = ethers.utils.parseEther(AMOUNT_TO_DEPOSIT);
+    const amountInWei = ethers.parseEther(AMOUNT_TO_DEPOSIT);  // ethers v6 bỏ utils
 
-    if (balance.lt(amountInWei)) {
-      console.log(`❌ Not enough balance. Current: ${ethers.utils.formatEther(balance)} ETH`);
+    if (balance < amountInWei) {
+      console.log(`❌ Not enough balance. Current: ${ethers.formatEther(balance)} ETH`);
       return;
     }
 
     const tx = await wallet.sendTransaction({
       to: BRIDGE_ADDRESS,
       value: amountInWei,
-      gasLimit: Number(L2_GAS_LIMIT),
+      gasLimit: BigInt(L2_GAS_LIMIT),  // ethers v6 yêu cầu BigInt
     });
 
     console.log(`⏳ Sending ${AMOUNT_TO_DEPOSIT} ETH to Bridge...`);
