@@ -40,7 +40,7 @@ function addLog(message, type) {
   let coloredMessage = message;
   if (type === "bridge") {
     coloredMessage = `{bright-magenta-fg}${message}{/bright-magenta-fg}`;
-  маркировкой else if (type === "system") {
+  } else if (type === "system") {
     coloredMessage = `{bright-white-fg}${message}{/bright-white-fg}`;
   } else if (type === "error") {
     coloredMessage = `{bright-red-fg}${message}{/bright-red-fg}`;
