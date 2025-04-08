@@ -6,8 +6,9 @@ class EthToT1Bridge {
         this.config = {
             sepoliaRpc: 'https://rpc-sepolia.rockx.com',
             t1Rpc: 'https://rpc.v006.t1protocol.com',
-            bridgeContractAddress: '0xAFdF5cb097D6FB2EB8B1FFbAB180e667458e18F4', // Contract trên Sepolia
-            amountToBridge: process.env.AMOUNT_TO_BRIDGE || '0.01'
+            bridgeContractAddress: '0xAFdF5cb097D6FB2EB8B1FFbAB180e667458e18F4',
+            amountToBridge: process.env.AMOUNT_TO_BRIDGE || '0.01',
+            destChainId: process.env.DEST_CHAIN_ID || '299792' // Chain ID của T1
         };
 
         this.bridgeABI = [
@@ -57,7 +58,7 @@ class EthToT1Bridge {
         return balanceEth;
     }
 
-    async bridgeEth(toAddress, message = "0x", gasLimit = "200000", destChainId = "1", callbackAddress = "0x0000000000000000000000000000000000000000") {
+    async bridgeEth(toAddress, message = "0x", gasLimit = "200000", destChainId = this.config.destChainId, callbackAddress = "0x0000000000000000000000000000000000000000") {
         try {
             if (!this.web3.utils.isAddress(toAddress)) {
                 throw new Error(`Địa chỉ đích không hợp lệ: ${toAddress}`);
@@ -70,11 +71,20 @@ class EthToT1Bridge {
                 throw new Error('Số dư không đủ để bridge');
             }
 
+            console.log('Tham số giao dịch:');
+            console.log('Bridge Contract:', this.config.bridgeContractAddress);
+            console.log('To Address:', toAddress);
+            console.log('Value:', this.config.amountToBridge, 'ETH (', amountInWei, 'wei)');
+            console.log('Message:', message);
+            console.log('Gas Limit:', gasLimit);
+            console.log('Dest Chain ID:', destChainId);
+            console.log('Callback Address:', callbackAddress);
+
             const tx = {
                 from: this.account.address,
                 to: this.config.bridgeContractAddress,
                 value: amountInWei,
-                gas: 200000,
+                gas: 300000, // Tăng gas limit để tránh out of gas
                 data: this.bridgeContract.methods.sendMessage(
                     toAddress,
                     amountInWei,
@@ -87,7 +97,9 @@ class EthToT1Bridge {
 
             console.log('Đang gửi giao dịch bridge...');
             const signedTx = await this.web3.eth.accounts.signTransaction(tx, this.account.privateKey);
-            const receipt = await this.web3.eth.sendSignedTransaction(signedTx.rawTransaction);
+            const receipt = await this.web3.eth.sendSignedTransaction(signedTx.rawTransaction)
+                .on('transactionHash', hash => console.log('Tx Hash:', hash))
+                .on('error', error => console.error('Lỗi trong quá trình gửi:', error));
 
             console.log('Giao dịch hoàn tất!');
             console.log('Transaction hash:', receipt.transactionHash);
@@ -95,7 +107,7 @@ class EthToT1Bridge {
             return receipt;
 
         } catch (error) {
-            console.error('Lỗi khi bridge:', error.message);
+            console.error('Lỗi khi bridge:', error);
             throw error;
         }
     }
@@ -121,7 +133,6 @@ async function main() {
     try {
         const bridge = new EthToT1Bridge();
         await bridge.loadPrivateKey();
-        // Sử dụng contract T1 làm địa chỉ đích
         const destinationAddress = "0x627B3692969b7330b8Faed2A8836A41EB4aC1918"; // Contract trên T1
         await bridge.executeWithRetry(destinationAddress);
         process.exit(0);
