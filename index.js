@@ -518,6 +518,6 @@ screen.key(["C-down"], () => { logsBox.scroll(1); safeRender(); });
 
 safeRender();
 mainMenu.focus();
-addLog("Đừng quên đăng ký YT và Telegram @NTExhaust!!", "system");
+addLog("Xin chào và chúc bạn may mắn!!", "system");
 updateLogs();
 updateWalletData();
