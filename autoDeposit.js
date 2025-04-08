@@ -1,5 +1,21 @@
 const { ethers } = require("ethers");
+const winston = require("winston");
 require("dotenv").config();
+
+// Cấu hình logger
+const logger = winston.createLogger({
+    level: "info",
+    format: winston.format.combine(
+        winston.format.timestamp(),
+        winston.format.printf(({ timestamp, level, message }) => {
+            return `${timestamp} [${level.toUpperCase()}]: ${message}`;
+        })
+    ),
+    transports: [
+        new winston.transports.Console(),
+        new winston.transports.File({ filename: "deposit.log" })
+    ]
+});
 
 // Cấu hình từ biến môi trường
 const config = {
@@ -44,32 +60,50 @@ async function autoDeposit() {
 
         // Kiểm tra balance
         const balance = await wallet.getBalance();
-        console.log(`Current balance: ${ethers.utils.formatEther(balance)} ETH`);
+        logger.info(`Current balance: ${ethers.utils.formatEther(balance)} ETH`);
 
         if (balance.lt(amountToDeposit)) {
-            throw new Error("Insufficient balance");
+            throw new Error(`Insufficient balance. Required: ${config.AMOUNT_TO_DEPOSIT} ETH`);
         }
 
         // Thực hiện deposit
-        console.log("Initiating deposit...");
+        logger.info(`Initiating deposit of ${config.AMOUNT_TO_DEPOSIT} ETH to bridge ${config.BRIDGE_ADDRESS}`);
         const tx = await bridgeContract.depositETH(amountToDeposit, {
             value: amountToDeposit,
             gasLimit: config.GAS_LIMIT
         });
 
+        logger.info(`Transaction submitted. Hash: ${tx.hash}`);
+
         // Chờ xác nhận
-        console.log("Waiting for transaction confirmation...");
+        logger.info("Waiting for transaction confirmation...");
         const receipt = await tx.wait();
-        
-        console.log("Deposit successful!");
-        console.log(`Transaction hash: ${receipt.transactionHash}`);
-        
+
+        // Thông tin chi tiết về giao dịch
+        const txDetails = {
+            hash: receipt.transactionHash,
+            blockNumber: receipt.blockNumber,
+            gasUsed: ethers.utils.formatUnits(receipt.gasUsed, "wei"),
+            status: receipt.status === 1 ? "Success" : "Failed"
+        };
+
+        if (receipt.status === 1) {
+            logger.info("Deposit successful!");
+            logger.info(`Transaction details: ${JSON.stringify(txDetails, null, 2)}`);
+        } else {
+            logger.error("Deposit failed!");
+            logger.error(`Transaction details: ${JSON.stringify(txDetails, null, 2)}`);
+        }
+
         // Kiểm tra balance mới
         const newBalance = await wallet.getBalance();
-        console.log(`New balance: ${ethers.utils.formatEther(newBalance)} ETH`);
+        logger.info(`New balance: ${ethers.utils.formatEther(newBalance)} ETH`);
 
     } catch (error) {
-        console.error("Error during deposit:", error.message);
+        logger.error(`Deposit failed with error: ${error.message}`);
+        if (error.transaction) {
+            logger.error(`Failed transaction hash: ${error.transaction.hash}`);
+        }
     }
 }
 
@@ -77,11 +111,12 @@ async function autoDeposit() {
  * Khởi động dịch vụ deposit tự động
  */
 function startAutoDeposit() {
-    console.log("Starting auto deposit service...");
+    logger.info("Starting auto deposit service...");
     autoDeposit(); // Chạy lần đầu
     
     const intervalMs = parseInt(config.INTERVAL_MINUTES) * 60 * 1000;
     setInterval(autoDeposit, intervalMs);
+    logger.info(`Scheduled deposits every ${config.INTERVAL_MINUTES} minutes`);
 }
 
 // Chạy chương trình
