@@ -195,7 +195,7 @@ function getMainMenuItems() {
 }
 
 function getBridgeMenuItems() {
-  let items = ["Cầu Tự Động ETH Sepolia & T1", "realizarTransaction Logs", "Quay Lại Menu Chính", "Làm Mới"];
+  let items = ["Cầu Tự Động ETH Sepolia & T1", "Xóa Nhật Ký Giao Dịch", "Quay Lại Menu Chính", "Làm Mới"];
   if (bridgeRunning) {
     items.splice(1, 0, "Dừng Giao Dịch");
   }
@@ -308,7 +308,7 @@ async function bridgeFromSepoliaToT1(i, amount) {
     addLog(`T1: Giao dịch đã gửi. Hash: ${tx.hash}`, "bridge");
     const receipt = await tx.wait();
     if (receipt.status === 1) {
-      addLog(`T1: Giao dịch thành công. Hash: ${tx.hash} .`, "success");
+      addLog(`T1: Giao dịch thành công. Hash: ${tx.hash} | URL: https://sepolia.etherscan.io/tx/${tx.hash}`, "success");
       const blockNumber = receipt.blockNumber;
       const txData = {
         hash: tx.hash,
@@ -348,7 +348,7 @@ async function bridgeFromT1ToSepolia(i, amount) {
     addLog(`T1: Giao dịch đã gửi. Hash: ${tx.hash}`, "bridge");
     const receipt = await tx.wait();
     if (receipt.status === 1) {
-      addLog(`T1: Giao dịch thành công. Hash: ${tx.hash}`, "success");
+      addLog(`T1: Giao dịch thành công. Hash: ${tx.hash} | URL: https://devnet.t1protocol.com/tx/${tx.hash}`, "success");
       const txData = {
         hash: tx.hash,
         amount: amount.toString(),
@@ -433,7 +433,7 @@ function adjustLayout() {
   const screenWidth = screen.width;
   const headerHeight = Math.max(8, Math.floor(screenHeight * 0.15));
   headerBox.top = 0;
-  headerBox.height = headerHeight; // Sửa lỗi ở đây
+  headerBox.height = headerHeight;
   headerBox.width = "100%";
   descriptionBox.top = "25%";
   descriptionBox.height = Math.floor(screenHeight * 0.05);
