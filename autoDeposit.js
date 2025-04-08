@@ -17,22 +17,87 @@ const logger = winston.createLogger({
     ]
 });
 
+// Danh sách RPC endpoints (fallback)
+const SEPOLIA_RPCS = [
+    process.env.SEPOLIA_RPC || "https://rpc.sepolia.org",
+    "https://1rpc.io/sepolia",
+    "https://rpc-sepolia.rockx.com"
+];
+
 // Cấu hình từ biến môi trường
 const config = {
-    SEPOLIA_RPC: process.env.SEPOLIA_RPC || "https://rpc.sepolia.org",
+    SEPOLIA_RPCS,
     T1_NETWORK: process.env.T1_NETWORK || "https://devnet-rpc.t1protocol.com",
     BRIDGE_ADDRESS: process.env.BRIDGE_ADDRESS || "0xAFdF5cb097D6FB2EB8B1FFbAB180e667458e18F4",
     PRIVATE_KEY: process.env.PRIVATE_KEY,
     AMOUNT_TO_DEPOSIT: process.env.AMOUNT_TO_DEPOSIT || "0.1", // ETH
     GAS_LIMIT: process.env.GAS_LIMIT || "300000",
+    L2_GAS_LIMIT: process.env.L2_GAS_LIMIT || "200000", // Gas limit cho L2
     INTERVAL_MINUTES: process.env.INTERVAL_MINUTES || "30"
 };
 
-// ABI của bridge contract (cần cập nhật từ T1 documentation)
+// ABI của bridge contract (từ Sepolia Etherscan)
 const BRIDGE_ABI = [
-    "function depositETH(uint256 amount) external payable",
-    "event Deposit(address indexed sender, uint256 amount)"
+    {
+        "constant": false,
+        "inputs": [
+            {
+                "name": "_gasLimit",
+                "type": "uint32"
+            }
+        ],
+        "name": "depositETH",
+        "outputs": [],
+        "payable": true,
+        "stateMutability": "payable",
+        "type": "function"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "name": "_from",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "name": "_to",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "name": "_amount",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "name": "_data",
+                "type": "bytes"
+            }
+        ],
+        "name": "ETHDepositInitiated",
+        "type": "event"
+    }
 ];
+
+/**
+ * Thử kết nối với một RPC endpoint khả dụng
+ */
+async function getWorkingProvider(rpcs) {
+    for (const rpc of rpcs) {
+        logger.info(`Attempting to connect to RPC: ${rpc}`);
+        try {
+            const provider = new ethers.providers.JsonRpcProvider(rpc);
+            const network = await provider.getNetwork();
+            logger.info(`Connected to ${rpc} - Network: ${network.name} (chainId: ${network.chainId})`);
+            return provider;
+        } catch (error) {
+            logger.warn(`Failed to connect to ${rpc}: ${error.message}`);
+        }
+    }
+    throw new Error("No working RPC endpoints available");
+}
 
 /**
  * Thực hiện deposit ETH từ Sepolia sang T1 qua bridge contract
@@ -50,29 +115,11 @@ async function autoDeposit() {
         }
 
         // Kết nối với Sepolia network
-        logger.info(`Connecting to Sepolia RPC: ${config.SEPOLIA_RPC}`);
-        let provider;
-        try {
-            provider = new ethers.providers.JsonRpcProvider(config.SEPOLIA_RPC);
-        } catch (providerError) {
-            throw new Error(`Failed to initialize provider: ${providerError.message}`);
-        }
-
-        // Kiểm tra kết nối mạng
-        logger.info("Checking network connection...");
-        const network = await provider.getNetwork().catch(err => {
-            throw new Error(`Network check failed: ${err.message}`);
-        });
-        logger.info(`Connected to network: ${network.name} (chainId: ${network.chainId})`);
+        const provider = await getWorkingProvider(config.SEPOLIA_RPCS);
 
         // Khởi tạo wallet
         logger.info("Initializing wallet...");
-        let wallet;
-        try {
-            wallet = new ethers.Wallet(config.PRIVATE_KEY, provider);
-        } catch (walletError) {
-            throw new Error(`Failed to initialize wallet: ${walletError.message}`);
-        }
+        const wallet = new ethers.Wallet(config.PRIVATE_KEY, provider);
         const walletAddress = await wallet.getAddress();
         logger.info(`Using wallet address: ${walletAddress}`);
 
@@ -83,6 +130,13 @@ async function autoDeposit() {
             BRIDGE_ABI,
             wallet
         );
+
+        // Kiểm tra contract có tồn tại không
+        const code = await provider.getCode(config.BRIDGE_ADDRESS);
+        if (code === "0x") {
+            throw new Error(`No contract deployed at ${config.BRIDGE_ADDRESS}`);
+        }
+        logger.info("Bridge contract exists and is callable");
 
         // Số lượng ETH để deposit
         const amountToDeposit = ethers.utils.parseEther(config.AMOUNT_TO_DEPOSIT);
@@ -98,7 +152,7 @@ async function autoDeposit() {
 
         // Thực hiện deposit
         logger.info(`Initiating deposit to bridge ${config.BRIDGE_ADDRESS}`);
-        const tx = await bridgeContract.depositETH(amountToDeposit, {
+        const tx = await bridgeContract.depositETH(config.L2_GAS_LIMIT, {
             value: amountToDeposit,
             gasLimit: config.GAS_LIMIT
         });
@@ -122,6 +176,8 @@ async function autoDeposit() {
         } else {
             logger.error("Deposit failed!");
             logger.error(`Transaction details: ${JSON.stringify(txDetails, null, 2)}`);
+            const txError = await provider.call(tx, receipt.blockNumber);
+            logger.error(`Revert reason: ${txError}`);
         }
 
         // Kiểm tra balance mới
@@ -135,6 +191,9 @@ async function autoDeposit() {
         }
         if (error.reason) {
             logger.error(`Reason: ${error.reason}`);
+        }
+        if (error.data) {
+            logger.error(`Error data: ${error.data}`);
         }
     }
 }
