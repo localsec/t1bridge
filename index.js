@@ -3,6 +3,7 @@ import blessed from "blessed";
 import figlet from "figlet";
 import { ethers } from "ethers";
 import puppeteer from "puppeteer";
+import fs from "fs"; // Thêm import fs
 
 const RPC_URL_SEPOLIA = process.env.RPC_URL_SEPOLIA;
 const RPC_URL_T1 = process.env.RPC_URL_T1;
@@ -49,7 +50,17 @@ function addLog(message, type) {
   } else if (type === "warning") {
     coloredMessage = `{bright-yellow-fg}${message}{/bright-yellow-fg}`;
   }
-  transactionLogs.push(`{bright-cyan-fg}[{/bright-cyan-fg} {bold}{grey-fg}${timestamp}{/grey-fg}{/bold} {bright-cyan-fg}]{/bright-cyan-fg} {bold}${coloredMessage}{/bold}`);
+  const logEntry = `{bright-cyan-fg}[{/bright-cyan-fg} {bold}{grey-fg}${timestamp}{/grey-fg}{/bold} {bright-cyan-fg}]{/bright-cyan-fg} {bold}${coloredMessage}{/bold}`;
+  transactionLogs.push(logEntry);
+  
+  // Ghi log vào file logs.txt
+  const plainLogEntry = `[${timestamp}] ${message}\n`;
+  fs.appendFile('logs.txt', plainLogEntry, (err) => {
+    if (err) {
+      console.error('Lỗi khi ghi vào file logs.txt:', err);
+    }
+  });
+  
   updateLogs();
 }
 
