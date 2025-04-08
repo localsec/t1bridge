@@ -6,7 +6,7 @@ class EthToT1Bridge {
         this.config = {
             sepoliaRpc: 'https://rpc-sepolia.rockx.com',
             t1Rpc: 'https://rpc.v006.t1protocol.com',
-            bridgeContractAddress: process.env.BRIDGE_CONTRACT_ADDRESS,
+            bridgeContractAddress: '0xAFdF5cb097D6FB2EB8B1FFbAB180e667458e18F4', // Contract trên Sepolia
             amountToBridge: process.env.AMOUNT_TO_BRIDGE || '0.01'
         };
 
@@ -59,6 +59,10 @@ class EthToT1Bridge {
 
     async bridgeEth(toAddress, message = "0x", gasLimit = "200000", destChainId = "1", callbackAddress = "0x0000000000000000000000000000000000000000") {
         try {
+            if (!this.web3.utils.isAddress(toAddress)) {
+                throw new Error(`Địa chỉ đích không hợp lệ: ${toAddress}`);
+            }
+
             const amountInWei = this.web3.utils.toWei(this.config.amountToBridge, 'ether');
             
             const balance = await this.checkBalance();
@@ -117,8 +121,8 @@ async function main() {
     try {
         const bridge = new EthToT1Bridge();
         await bridge.loadPrivateKey();
-        // Thay đổi địa chỉ nhận theo nhu cầu của bạn
-        const destinationAddress = "0xYOUR_DESTINATION_ADDRESS";
+        // Sử dụng contract T1 làm địa chỉ đích
+        const destinationAddress = "0x627B3692969b7330b8Faed2A8836A41EB4aC1918"; // Contract trên T1
         await bridge.executeWithRetry(destinationAddress);
         process.exit(0);
     } catch (error) {
