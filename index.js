@@ -6,7 +6,8 @@ import puppeteer from "puppeteer";
 
 const RPC_URL_SEPOLIA = process.env.RPC_URL_SEPOLIA;
 const RPC_URL_T1 = process.env.RPC_URL_T1;
-const PRIVATE_KEY = process.env.PRIVATE_KEY;
+// Chuyển PRIVATE_KEY thành mảng các khóa riêng từ biến môi trường
+const PRIVATE_KEYS = process.env.PRIVATE_KEYS ? process.env.PRIVATE_KEYS.split(",") : [];
 const NETWORK_NAME = "SEPOLIA & T1";
 const WEB_URL_DEPOSIT = "https://devnet.t1protocol.com/bridge?transactionType=Deposit";
 const WEB_URL_WITHDRAW = "https://devnet.t1protocol.com/bridge?transactionType=Withdraw";
@@ -18,18 +19,12 @@ const BridgeABI = [
   "function sendMessage(address _to, uint256 _value, bytes _message, uint256 _gasLimit, uint64 _destChainId, address _callbackAddress) external payable"
 ];
 
-let walletInfo = {
-  address: "",
-  balanceEthSepolia: "0.00",
-  balanceEthT1: "0.00",
-  network: NETWORK_NAME,
-  status: "Đang khởi tạo"
-};
-
+// Cập nhật walletInfo thành mảng để lưu thông tin nhiều ví
+let walletInfo = [];
 let transactionLogs = [];
 let bridgeRunning = false;
 let bridgeCancelled = false;
-let globalWallet = null;
+let globalWallets = [];
 
 function getShortAddress(address) {
   return address.slice(0, 6) + "..." + address.slice(-4);
@@ -108,8 +103,8 @@ const headerBox = blessed.box({
   style: { fg: "white", bg: "default" }
 });
 
-figlet.text("LocalSec".toUpperCase(), { font: "Speed", horizontalLayout: "default" }, (err, data) => {
-  if (err) headerBox.setContent("{center}{bold}LocalSec{/bold}{/center}");
+figlet.text("NT EXHAUST".toUpperCase(), { font: "Speed", horizontalLayout: "default" }, (err, data) => {
+  if (err) headerBox.setContent("{center}{bold}NT Exhaust{/bold}{/center}");
   else headerBox.setContent(`{center}{bold}{bright-cyan-fg}${data}{/bright-cyan-fg}{/bold}{/center}`);
   safeRender();
 });
@@ -207,15 +202,18 @@ function getBridgeMenuItems() {
 }
 
 function updateWallet() {
-  const shortAddress = walletInfo.address ? getShortAddress(walletInfo.address) : "N/A";
-  const ethSepolia = walletInfo.balanceEthSepolia ? Number(walletInfo.balanceEthSepolia).toFixed(4) : "0.0000";
-  const ethT1 = walletInfo.balanceEthT1 ? Number(walletInfo.balanceEthT1).toFixed(4) : "0.0000";
-  const content = `┌── Địa chỉ          : {bright-yellow-fg}${shortAddress}{/bright-yellow-fg}
+  let content = "";
+  walletInfo.forEach((info, index) => {
+    const shortAddress = info.address ? getShortAddress(info.address) : "N/A";
+    const ethSepolia = info.balanceEthSepolia ? Number(info.balanceEthSepolia).toFixed(4) : "0.0000";
+    const ethT1 = info.balanceEthT1 ? Number(info.balanceEthT1).toFixed(4) : "0.0000";
+    content += `┌── Ví ${index + 1} - Địa chỉ: {bright-yellow-fg}${shortAddress}{/bright-yellow-fg}
 │   ├── ETH Sepolia  : {bright-green-fg}${ethSepolia}{/bright-green-fg}
 │   └── ETH T1       : {bright-green-fg}${ethT1}{/bright-green-fg}
 └── Mạng             : {bright-cyan-fg}${NETWORK_NAME}{/bright-cyan-fg}
 `;
-  walletBox.setContent(content);
+  });
+  walletBox.setContent(content || "Không có ví nào được tải.");
   safeRender();
 }
 
@@ -223,13 +221,21 @@ async function updateWalletData() {
   try {
     const providerSepolia = new ethers.JsonRpcProvider(RPC_URL_SEPOLIA);
     const providerT1 = new ethers.JsonRpcProvider(RPC_URL_T1);
-    const wallet = new ethers.Wallet(PRIVATE_KEY, providerSepolia);
-    globalWallet = wallet;
-    walletInfo.address = wallet.address;
-    const ethBalanceSepolia = await providerSepolia.getBalance(wallet.address);
-    walletInfo.balanceEthSepolia = ethers.formatEther(ethBalanceSepolia);
-    const ethBalanceT1 = await providerT1.getBalance(wallet.address);
-    walletInfo.balanceEthT1 = ethers.formatEther(ethBalanceT1);
+    walletInfo = [];
+    globalWallets = [];
+    
+    for (const privateKey of PRIVATE_KEYS) {
+      const wallet = new ethers.Wallet(privateKey.trim(), providerSepolia);
+      globalWallets.push(wallet);
+      const ethBalanceSepolia = await providerSepolia.getBalance(wallet.address);
+      const ethBalanceT1 = await providerT1.getBalance(wallet.address);
+      walletInfo.push({
+        address: wallet.address,
+        balanceEthSepolia: ethers.formatEther(ethBalanceSepolia),
+        balanceEthT1: ethers.formatEther(ethBalanceT1),
+        network: NETWORK_NAME
+      });
+    }
     updateWallet();
     addLog("Số dư & Ví đã được cập nhật !!", "system");
   } catch (error) {
@@ -275,14 +281,14 @@ async function injectTxDataToWeb(txData, transactionType) {
           };
         const lowerWallet = wallet.toLowerCase();
         if (!stateObj.state.frontTransactions) {
-        stateObj.state.frontTransactions = {};
-      }
-      if (!stateObj.state.frontTransactions[lowerWallet]) {
-        stateObj.state.frontTransactions[lowerWallet] = [];
-      }
-      stateObj.state.frontTransactions[lowerWallet].unshift(txData);  
-      localStorage.setItem("bridgeTransactionsV2", JSON.stringify(stateObj));
-      return stateObj;
+          stateObj.state.frontTransactions = {};
+        }
+        if (!stateObj.state.frontTransactions[lowerWallet]) {
+          stateObj.state.frontTransactions[lowerWallet] = [];
+        }
+        stateObj.state.frontTransactions[lowerWallet].unshift(txData);  
+        localStorage.setItem("bridgeTransactionsV2", JSON.stringify(stateObj));
+        return stateObj;
     }, { wallet: txData.from, txData });
     await new Promise((resolve) => setTimeout(resolve, 5000));
     await browser.close();
@@ -292,10 +298,11 @@ async function injectTxDataToWeb(txData, transactionType) {
   }
 }
 
-async function bridgeFromSepoliaToT1(i, amount) {
-  addLog(`T1: Thực hiện cầu Sepolia ➯ T1, Số lượng ${ethers.formatEther(amount)} ETH `, "bridge");
+async function bridgeFromSepoliaToT1(i, amount, walletIndex) {
+  const privateKey = PRIVATE_KEYS[walletIndex].trim();
+  addLog(`T1: Thực hiện cầu Sepolia ➯ T1 (Ví ${walletIndex + 1}), Số lượng ${ethers.formatEther(amount)} ETH `, "bridge");
   const providerSepolia = new ethers.JsonRpcProvider(RPC_URL_SEPOLIA);
-  const walletSepolia = new ethers.Wallet(PRIVATE_KEY, providerSepolia);
+  const walletSepolia = new ethers.Wallet(privateKey, providerSepolia);
   const contractSepolia = new ethers.Contract(Router_Sepolia, BridgeABI, walletSepolia);
   const extraFee = ethers.parseEther("0.000000000000168");
   const totalValue = amount + extraFee;
@@ -309,10 +316,10 @@ async function bridgeFromSepoliaToT1(i, amount) {
       walletSepolia.address,
       { value: totalValue, gasLimit: 500000 }
     );
-    addLog(`T1: Giao dịch đã gửi. Hash: ${getShortHash(tx.hash)}`, "bridge");
+    addLog(`T1: Giao dịch đã gửi (Ví ${walletIndex + 1}). Hash: ${getShortHash(tx.hash)}`, "bridge");
     const receipt = await tx.wait();
     if (receipt.status === 1) {
-      addLog(`T1: Giao dịch thành công. Hash: ${getShortHash(tx.hash)} .`, "success");
+      addLog(`T1: Giao dịch thành công (Ví ${walletIndex + 1}). Hash: ${getShortHash(tx.hash)} .`, "success");
       const blockNumber = receipt.blockNumber;
       const txData = {
         hash: tx.hash,
@@ -327,17 +334,18 @@ async function bridgeFromSepoliaToT1(i, amount) {
       await injectTxDataToWeb(txData, "Deposit");
       await updateWalletData();
     } else {
-      addLog(`T1: Giao dịch thất bại.`, "error");
+      addLog(`T1: Giao dịch thất bại (Ví ${walletIndex + 1}).`, "error");
     }
   } catch (error) {
-    addLog(`T1: Lỗi - ${error.message}`, "error");
+    addLog(`T1: Lỗi (Ví ${walletIndex + 1}) - ${error.message}`, "error");
   }
 }
 
-async function bridgeFromT1ToSepolia(i, amount) {
-  addLog(`T1: Thực hiện cầu T1 ➯ Sepolia, Số lượng ${ethers.formatEther(amount)} ETH `, "bridge");
+async function bridgeFromT1ToSepolia(i, amount, walletIndex) {
+  const privateKey = PRIVATE_KEYS[walletIndex].trim();
+  addLog(`T1: Thực hiện cầu T1 ➯ Sepolia (Ví ${walletIndex + 1}), Số lượng ${ethers.formatEther(amount)} ETH `, "bridge");
   const providerT1 = new ethers.JsonRpcProvider(RPC_URL_T1);
-  const walletT1 = new ethers.Wallet(PRIVATE_KEY, providerT1);
+  const walletT1 = new ethers.Wallet(privateKey, providerT1);
   const contractT1 = new ethers.Contract(Router_T1, BridgeABI, walletT1);
   try {
     const tx = await contractT1.sendMessage(
@@ -349,10 +357,10 @@ async function bridgeFromT1ToSepolia(i, amount) {
       walletT1.address,
       { value: amount, gasLimit: 500000 }
     );
-    addLog(`T1: Giao dịch đã gửi. Hash: ${getShortHash(tx.hash)}`, "bridge");
+    addLog(`T1: Giao dịch đã gửi (Ví ${walletIndex + 1}). Hash: ${getShortHash(tx.hash)}`, "bridge");
     const receipt = await tx.wait();
     if (receipt.status === 1) {
-      addLog(`T1: Giao dịch thành công. Hash: ${getShortHash(tx.hash)}`, "success");
+      addLog(`T1: Giao dịch thành công (Ví ${walletIndex + 1}). Hash: ${getShortHash(tx.hash)}`, "success");
       const txData = {
         hash: tx.hash,
         amount: amount.toString(),
@@ -366,10 +374,10 @@ async function bridgeFromT1ToSepolia(i, amount) {
       await injectTxDataToWeb(txData, "Withdraw");
       await updateWalletData();
     } else {
-      addLog(`T1: Giao dịch thất bại.`, "error");
+      addLog(`T1: Giao dịch thất bại (Ví ${walletIndex + 1}).`, "error");
     }
   } catch (error) {
-    addLog(`T1: Lỗi - ${error.message}`, "error");
+    addLog(`T1: Lỗi (Ví ${walletIndex + 1}) - ${error.message}`, "error");
   }
 }
 
@@ -387,7 +395,7 @@ async function runAutoBridge() {
       addLog("Cầu T1: Đầu vào phải là số.", "bridge");
       return;
     }
-    addLog(`Cầu T1: Bạn đã nhập ${loopCount} lần cầu tự động.`, "bridge");
+    addLog(`Cầu T1: Bạn đã nhập ${loopCount} lần cầu tự động cho ${PRIVATE_KEYS.length} ví.`, "bridge");
     if (bridgeRunning) {
       addLog("Cầu T1: Giao dịch đang chạy. Vui lòng dừng giao dịch trước.", "system");
       return;
@@ -398,6 +406,7 @@ async function runAutoBridge() {
     bridgeSubMenu.setItems(getBridgeMenuItems());
     bridgeSubMenu.show();
     safeRender();
+
     for (let i = 1; i <= loopCount; i++) {
       if (bridgeCancelled) {
         addLog(`Cầu T1: Cầu tự động bị dừng tại chu kỳ ${i}.`, "bridge");
@@ -405,17 +414,25 @@ async function runAutoBridge() {
       }
       const randomAmount = getRandomNumber(0.0001, 0.001);
       const amount = ethers.parseEther(randomAmount.toFixed(6));
-      if (i % 2 === 1) {
-        await bridgeFromSepoliaToT1(i, amount);
-      } else {
-        await bridgeFromT1ToSepolia(i, amount);
+
+      // Lặp qua tất cả các ví
+      for (let walletIndex = 0; walletIndex < PRIVATE_KEYS.length; walletIndex++) {
+        if (bridgeCancelled) {
+          addLog(`Cầu T1: Cầu tự động bị dừng tại ví ${walletIndex + 1}.`, "bridge");
+          break;
+        }
+        if (i % 2 === 1) {
+          await bridgeFromSepoliaToT1(i, amount, walletIndex);
+        } else {
+          await bridgeFromT1ToSepolia(i, amount, walletIndex);
+        }
       }
 
       if (i < loopCount) {
         const delayTime = getRandomDelay();
         const minutes = Math.floor(delayTime / 60000);
         const seconds = Math.floor((delayTime % 60000) / 1000);
-        addLog(`Cầu T1: Cầu thứ ${i} hoàn tất.`, "bridge");
+        addLog(`Cầu T1: Cầu thứ ${i} hoàn tất cho tất cả ví.`, "bridge");
         addLog(`Cầu T1: Đợi ${minutes} phút ${seconds} giây trước giao dịch tiếp theo...`, "bridge");
         await waitWithCancel(delayTime, "bridge");
         if (bridgeCancelled) {
@@ -518,6 +535,6 @@ screen.key(["C-down"], () => { logsBox.scroll(1); safeRender(); });
 
 safeRender();
 mainMenu.focus();
-addLog("Mụ Vân già lắm chuyện!!", "system");
+addLog("Từ giờ hãy gọi Vân là EM GÁI MƯA!!", "system");
 updateLogs();
 updateWalletData();
