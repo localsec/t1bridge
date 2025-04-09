@@ -112,7 +112,7 @@ figlet.text("LocalSec".toUpperCase(), { font: "Speed", horizontalLayout: "defaul
 const descriptionBox = blessed.box({
   left: "center",
   width: "100%",
-  content: "{center}{bold}{bright-yellow-fg}✦ ✦ CẦU TỰ ĐỘNG T1 ✦ ✦{/bright-yellow-fg}{/bold}{/center}",
+  content: "{center}{bold}{bright-yellow-fg}✦ ✦ CẦU TỰ ĐỘNG ĐI THÁI BÌNH T1 ✦ ✦{/bright-yellow-fg}{/bold}{/center}",
   tags: true,
   style: { fg: "white", bg: "default" }
 });
