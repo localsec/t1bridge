@@ -194,7 +194,7 @@ function getMainMenuItems() {
 }
 
 function getBridgeMenuItems() {
-  let items = ["Cầu tự động ETH Sepolia & T1", "Xóa nhật ký giao dịch", "Quay lại menu chính", "Làm mới"];
+  let items = ["Cầu tự động ETH Sepolia => T1 Thái Bình", "Xóa nhật ký giao dịch", "Quay lại menu chính", "Làm mới"];
   if (bridgeRunning) {
     items.splice(1, 0, "Dừng giao dịch");
   }
